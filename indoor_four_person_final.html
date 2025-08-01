@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Hyderabad Indoor Sports" />
+  <meta name="format-detection" content="telephone=no" />
+  <title>Hyderabad Indoor Sports - Firebase Edition</title>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.5.2/firebase-app.js";
+    import {
+      getFirestore,
+      collection,
+      addDoc,
+      deleteDoc,
+      doc,
+      query,
+      where,
+      onSnapshot,
+      getDocs
+    } from "https://www.gstatic.com/firebasejs/10.5.2/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyC6J_X4K5TiyBfU3MMzmeyjF77MdkHHaH8",
+      authDomain: "booking-system-ae6be.firebaseapp.com",
+      projectId: "booking-system-ae6be",
+      storageBucket: "booking-system-ae6be.firebasestorage.app",
+      messagingSenderId: "782363432567",
+      appId: "1:782363432567:web:d16109e838b7028fe8d872"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    async function book() {
+      const name = document.getElementById("name").value;
+      const game = document.getElementById("game").value;
+      const dates = document.getElementById("dateList").value.split(",").map(d => d.trim());
+      const start = document.getElementById("startTime").value;
+      const end = document.getElementById("endTime").value;
+      const price = parseInt(document.getElementById("price").value) || 0;
+      const advance = parseInt(document.getElementById("advance").value) || 0;
+      const remaining = price - advance;
+
+      if (!dates.length || !start || !end) {
+        alert("❗ Please enter all details correctly.");
+        return;
+      }
+
+      const slot = `${start}-${end}`;
+      const bookingsCol = collection(db, "bookings");
+
+      let anyAdded = false;
+
+      for (const date of dates) {
+        const q = query(bookingsCol, where("date", "==", date), where("slot", "==", slot));
+        const snapshot = await getDocs(q);
+
+        if (!snapshot.empty) {
+          alert(`⛔ Time slot already booked on ${date}`);
+          continue;
+        }
+
+        await addDoc(bookingsCol, {
+          name,
+          game,
+          date,
+          slot,
+          total: price,
+          advance,
+          remaining: remaining > 0 ? remaining : 0
+        });
+
+        anyAdded = true;
+      }
+
+      if (anyAdded) {
+        alert("✅ Booking(s) saved successfully.");
+        clearForm();
+      }
+    }
+
+    function clearForm() {
+      document.getElementById("dateList").value = "";
+      document.getElementById("startTime").value = "";
+      document.getElementById("endTime").value = "";
+      document.getElementById("price").value = "5000";
+      document.getElementById("advance").value = "2000";
+      document.getElementById("remaining").value = "3000";
+    }
+
+    function renderBookings(bookings) {
+      const allBookings = document.getElementById("allBookings");
+      allBookings.innerHTML = "";
+
+      for (const date in bookings) {
+        const dateHeader = document.createElement("h4");
+        dateHeader.textContent = `📆 ${date}`;
+        allBookings.appendChild(dateHeader);
+
+        const ul = document.createElement("ul");
+
+        bookings[date].forEach(b => {
+          const li = document.createElement("li");
+          const msg = `📅 Booking for ${b.name} | ${b.game} on ${b.date} from ${convertTo12Hour(b.slot)}. Total: ${b.total}, Advance: ${b.advance}, Remaining: ${b.remaining}`;
+          const shareLink = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+
+          li.innerHTML = `🙍 <strong>${b.name}</strong> | 🏐 ${b.game}<br>⏰ ${convertTo12Hour(b.slot)}<br>💰 PKR ${b.total} | 💵 ${b.advance} | 💸 ${b.remaining}<br>
+            <button onclick="removeSlot('${b.id}')">Remove</button>
+            <a href="${shareLink}" target="_blank"><button>📤 Share on WhatsApp</button></a>
+            <hr>`;
+          ul.appendChild(li);
+        });
+
+        allBookings.appendChild(ul);
+      }
+    }
+
+    async function removeSlot(id) {
+      await deleteDoc(doc(db, "bookings", id));
+      alert("❌ Booking removed.");
+    }
+
+    function convertTo12Hour(timeRange) {
+      const [start, end] = timeRange.split("-");
+      return `${formatTime(start)} - ${formatTime(end)}`;
+    }
+
+    function formatTime(t) {
+      const [h, m] = t.split(":");
+      const hour = parseInt(h);
+      const suffix = hour >= 12 ? "PM" : "AM";
+      const formatted = `${((hour + 11) % 12 + 1)}:${m} ${suffix}`;
+      return formatted;
+    }
+
+    window.book = book;
+    window.removeSlot = removeSlot;
+
+    window.onload = () => {
+      const bookingsCol = collection(db, "bookings");
+      onSnapshot(bookingsCol, (snapshot) => {
+        const bookings = {};
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          if (!bookings[data.date]) bookings[data.date] = [];
+          bookings[data.date].push({ ...data, id: doc.id });
+        });
+        renderBookings(bookings);
+      });
+    };
+  </script>
+  <style>
+    body {
+      background: url('https://images.unsplash.com/photo-1600200782760-9b0f193ab9b0?auto=format&fit=crop&w=1950&q=80') no-repeat center center/cover;
+      font-family: Arial, sans-serif;
+      color: white;
+      padding: 20px;
+    }
+    .form-container, .booking-summary {
+      background: rgba(0,0,0,0.7);
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+    }
+    label, h1, h3 {
+      color: #fff;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 10px;
+      margin: 5px 0;
+    }
+    .btn {
+      padding: 10px;
+      margin-top: 10px;
+      background: #28a745;
+      color: white;
+      border: none;
+      cursor: pointer;
+      width: 100%;
+    }
+    .btn-danger {
+      background: #dc3545;
+    }
+  </style>
+</head>
+<body>
+  <h1>Hyderabad Indoor Sports</h1>
+
+  <div class="form-container">
+    <label for="name">Enter Name</label>
+    <input type="text" id="name" placeholder="Enter your name" />
+
+    <label for="game">Select Game</label>
+    <select id="game">
+      <option value="Football">Football</option>
+      <option value="Cricket">Cricket</option>
+      <option value="Badminton">Badminton</option>
+    </select>
+
+    <label>Select Dates (comma separated):</label>
+    <textarea id="dateList" placeholder="e.g. 2025-08-01,2025-08-02" rows="2"></textarea>
+
+    <label>Start Time:</label>
+    <input type="time" id="startTime" />
+
+    <label>End Time:</label>
+    <input type="time" id="endTime" />
+
+    <label>Total Price:</label>
+    <input type="number" id="price" value="5000" oninput="updateRemaining()" />
+
+    <label>Advance Payment:</label>
+    <input type="number" id="advance" value="2000" oninput="updateRemaining()" />
+
+    <label>Remaining Payment:</label>
+    <input type="number" id="remaining" value="3000" readonly />
+
+    <button class="btn" onclick="book()">Book</button>
+  </div>
+
+  <div class="form-container">
+    <h3>📅 Booked Slots</h3>
+    <button id="toggleBookingsBtn" class="btn">Show Booked Slots</button>
+    <div id="allBookings" style="display: none;"></div>
+  </div>
+
+  <script>
+    document.getElementById("toggleBookingsBtn").addEventListener("click", function() {
+      const bookingsDiv = document.getElementById("allBookings");
+      if (bookingsDiv.style.display === "none") {
+        bookingsDiv.style.display = "block";
+        this.textContent = "Hide Booked Slots";
+      } else {
+        bookingsDiv.style.display = "none";
+        this.textContent = "Show Booked Slots";
+      }
+    });
+  </script>
+
+  <script>
+    function updateRemaining() {
+      const price = parseInt(document.getElementById("price").value) || 0;
+      const advance = parseInt(document.getElementById("advance").value) || 0;
+      const remaining = price - advance;
+      document.getElementById("remaining").value = remaining > 0 ? remaining : 0;
+    }
+  </script>
+</body>
+</html>
